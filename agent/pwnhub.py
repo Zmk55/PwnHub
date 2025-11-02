@@ -30,8 +30,8 @@ class PwnHub(plugins.Plugin):
             'heartbeat_interval': 300,
             'push_handshakes': True,
             'upload_method': 'http',
-            'handshake_path': '/root/handshakes',
-            'agent_id_file': '/root/.pwnhub_agent_state.json',
+            'handshake_path': '~/handshakes',
+            'agent_id_file': '~/.pwnhub_agent_state.json',
             'log_level': 'INFO'
         }
         self.device_serial = None
@@ -58,7 +58,8 @@ class PwnHub(plugins.Plugin):
         self.logger.info("Plugin loaded")
         
         # Initialize state file path
-        self.state_file = Path(self.options.get('agent_id_file', '/root/.pwnhub_agent_state.json'))
+        agent_id_file = self.options.get('agent_id_file', '~/.pwnhub_agent_state.json')
+        self.state_file = Path(agent_id_file).expanduser()
         
         # Capture device identity
         try:
@@ -167,7 +168,8 @@ class PwnHub(plugins.Plugin):
 
     def get_handshake_count(self):
         """Count handshake files in handshake_path."""
-        handshake_path = Path(self.options.get('handshake_path', '/root/handshakes'))
+        handshake_path_str = self.options.get('handshake_path', '~/handshakes')
+        handshake_path = Path(handshake_path_str).expanduser()
         if not handshake_path.exists():
             return 0
         
@@ -356,7 +358,8 @@ class PwnHub(plugins.Plugin):
         if self.options.get('upload_method') != 'http':
             return
         
-        handshake_path = Path(self.options.get('handshake_path', '/root/handshakes'))
+        handshake_path_str = self.options.get('handshake_path', '~/handshakes')
+        handshake_path = Path(handshake_path_str).expanduser()
         if not handshake_path.exists():
             return
         
@@ -411,7 +414,8 @@ class PwnHub(plugins.Plugin):
         self.logger.info(f"Handshake captured: {filename}")
         
         # Find the handshake file
-        handshake_path = Path(self.options.get('handshake_path', '/root/handshakes'))
+        handshake_path_str = self.options.get('handshake_path', '~/handshakes')
+        handshake_path = Path(handshake_path_str).expanduser()
         file_path = handshake_path / filename
         
         if file_path.exists():

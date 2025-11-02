@@ -29,8 +29,8 @@ auth_token = ""
 heartbeat_interval = 300
 push_handshakes = true
 upload_method = "http"
-handshake_path = "/root/handshakes"
-agent_id_file = "/root/.pwnhub_agent_state.json"
+handshake_path = "~/handshakes"
+agent_id_file = "~/.pwnhub_agent_state.json"
 log_level = "INFO"
 ```
 
@@ -48,8 +48,8 @@ systemctl restart pwnagotchi
 - `heartbeat_interval` (default: `300`): Seconds between heartbeat messages
 - `push_handshakes` (default: `true`): Automatically upload captured handshakes
 - `upload_method` (default: `"http"`): Method for uploads ("http" or "ssh")
-- `handshake_path` (default: `"/root/handshakes"`): Local path to handshake files
-- `agent_id_file` (default: `"/root/.pwnhub_agent_state.json"`): Path to agent state file for tracking device identity and image generation
+- `handshake_path` (default: `"~/handshakes"`): Local path to handshake files
+- `agent_id_file` (default: `"~/.pwnhub_agent_state.json"`): Path to agent state file for tracking device identity and image generation
 - `log_level` (default: `"INFO"`): Logging level (DEBUG, INFO, WARNING, ERROR)
 
 ## Features
@@ -107,7 +107,7 @@ curl http://10.67.0.1:5000/health
 ### Verify handshake_path exists and is readable:
 
 ```bash
-ls -la /root/handshakes
+ls -la ~/handshakes
 ```
 
 ### Common Issues
