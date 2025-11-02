@@ -12,10 +12,10 @@ import threading
 import subprocess
 import socket
 from pathlib import Path
-from pwnagotchi.plugins import Plugin
+import pwnagotchi.plugins as plugins
 
 
-class PwnHub(Plugin):
+class PwnHub(plugins.Plugin):
     __author__ = 'PwnHub Team'
     __version__ = '1.0.0'
     __license__ = 'MIT'
@@ -397,7 +397,7 @@ class PwnHub(Plugin):
                 self.logger.error(f"Error in background loop: {e}")
                 time.sleep(60)  # Wait a minute before retrying
 
-    def on_handshake(self, agent, filename, attack, client, ssid, psk):
+    def on_handshake(self, agent, filename, access_point, client_station):
         """Called when a handshake is captured."""
         if not self.options.get('push_handshakes', True):
             return
