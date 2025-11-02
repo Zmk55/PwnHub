@@ -2,6 +2,45 @@
 PwnHub Agent Plugin for Pwnagotchi
 This plugin allows Pwnagotchi devices to register with a PwnHub server
 and upload handshake files automatically.
+
+CONFIGURATION:
+Add the following section to /etc/pwnagotchi/config.toml:
+
+    [main.plugins.pwnhub]
+    enabled = true
+    hub_url = "http://10.67.0.1:5000"
+    auth_token = ""
+    heartbeat_interval = 300
+    push_handshakes = true
+    upload_method = "http"
+    handshake_path = "~/handshakes"
+    agent_id_file = "~/.pwnhub_agent_state.json"
+    log_level = "INFO"
+
+CONFIGURATION OPTIONS:
+    enabled (bool): Enable or disable the plugin (default: true)
+    hub_url (str): URL of the PwnHub server API (default: "http://10.67.0.1:5000")
+    auth_token (str): Authentication token for hub communication (default: "", not enforced yet)
+    heartbeat_interval (int): Seconds between heartbeat messages (default: 300)
+    push_handshakes (bool): Automatically upload captured handshakes (default: true)
+    upload_method (str): Method for uploads - "http" or "ssh" (default: "http")
+    handshake_path (str): Local path to handshake files (default: "~/handshakes")
+    agent_id_file (str): Path to agent state file for tracking device identity (default: "~/.pwnhub_agent_state.json")
+    log_level (str): Logging level - DEBUG, INFO, WARNING, ERROR (default: "INFO")
+
+INSTALLATION:
+1. Copy this file to /usr/local/share/pwnagotchi/custom-plugins/pwnhub.py
+2. Set permissions: chmod 644 /usr/local/share/pwnagotchi/custom-plugins/pwnhub.py
+3. Add configuration section to /etc/pwnagotchi/config.toml (see above)
+4. Restart Pwnagotchi service: systemctl restart pwnagotchi
+
+FEATURES:
+- Automatic device registration with hub
+- Periodic heartbeat messages
+- Automatic handshake file upload
+- Retry failed uploads when internet becomes available
+- Device identity tracking (CPU serial, machine-id, SSH fingerprint)
+- Image generation detection (tracks when device is re-imaged on same hardware)
 """
 
 import logging
@@ -23,6 +62,8 @@ class PwnHub(plugins.Plugin):
 
     def __init__(self):
         super().__init__()
+        # Default options - these can be overridden in /etc/pwnagotchi/config.toml
+        # See docstring at top of file for configuration details
         self.options = {
             'enabled': True,
             'hub_url': 'http://10.67.0.1:5000',
@@ -44,6 +85,9 @@ class PwnHub(plugins.Plugin):
         self.background_thread = None
         self.running = False
         self.logger = logging.getLogger('PwnHub')
+        self.agent = None  # Store agent reference
+        self.last_registration_attempt = 0
+        self.pending_handshakes = []  # Track failed uploads to retry
 
     def on_loaded(self):
         """Called when plugin is loaded."""
@@ -91,9 +135,8 @@ class PwnHub(plugins.Plugin):
 
     def on_ready(self, agent):
         """Called when the Pwnagotchi agent is ready."""
+        self.agent = agent
         self.logger.info("Agent ready")
-        # Store agent reference if needed later
-        # (Not currently needed for this plugin, but required for proper registration)
 
     def on_unload(self, ui):
         """Called when plugin is unloaded."""
@@ -272,11 +315,13 @@ class PwnHub(plugins.Plugin):
             
             # Update state
             self.state['last_registered'] = int(time.time())
+            self.last_registration_attempt = int(time.time())
             self.save_state()
             
             return True
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Error registering device: {e}")
+            self.last_registration_attempt = int(time.time())  # Track attempt even on failure
             return False
 
     def send_heartbeat(self):
@@ -345,9 +390,15 @@ class PwnHub(plugins.Plugin):
                     return False
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Error uploading handshake {file_path.name}: {e}")
+            # Add to pending list for retry
+            if file_path.exists():
+                self.pending_handshakes.append(file_path)
             return False
         except Exception as e:
             self.logger.error(f"Unexpected error uploading {file_path.name}: {e}")
+            # Add to pending list for retry
+            if file_path.exists():
+                self.pending_handshakes.append(file_path)
             return False
 
     def sync_handshakes(self):
@@ -423,3 +474,46 @@ class PwnHub(plugins.Plugin):
             self.upload_handshake_file(file_path)
         else:
             self.logger.warning(f"Handshake file not found: {file_path}")
+    
+    def on_internet_available(self, agent):
+        """Called when internet connectivity is available."""
+        self.logger.info("Internet connectivity available")
+        
+        # Retry device registration if it hasn't been registered recently
+        current_time = int(time.time())
+        if current_time - self.last_registration_attempt > 300:  # 5 minutes
+            self.logger.info("Retrying device registration")
+            if self.register_device():
+                self.last_registration_attempt = current_time
+        
+        # Retry any pending handshake uploads
+        if self.pending_handshakes:
+            self.logger.info(f"Retrying {len(self.pending_handshakes)} pending handshake uploads")
+            retry_list = self.pending_handshakes.copy()
+            self.pending_handshakes = []
+            
+            for file_path in retry_list:
+                if file_path.exists():
+                    self.logger.info(f"Retrying upload: {file_path.name}")
+                    if self.upload_handshake_file(file_path):
+                        # Successfully uploaded, file will be deleted
+                        pass
+                    else:
+                        # Still failed, add back to pending
+                        self.pending_handshakes.append(file_path)
+                else:
+                    self.logger.warning(f"Pending handshake file no longer exists: {file_path}")
+        
+        # Also sync any new handshakes
+        if self.options.get('push_handshakes', True):
+            self.sync_handshakes()
+    
+    def on_rebooting(self, agent):
+        """Called when the agent is rebooting the board."""
+        self.logger.info("Device rebooting, sending final heartbeat")
+        
+        # Try to send a final heartbeat before shutdown
+        try:
+            self.send_heartbeat()
+        except Exception as e:
+            self.logger.warning(f"Failed to send final heartbeat: {e}")
