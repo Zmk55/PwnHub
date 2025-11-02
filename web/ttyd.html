@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PwnHub - SSH Terminal</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e1e;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        #ttyd-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #status {
+            padding: 10px;
+            background-color: #2d2d2d;
+            color: #fff;
+            font-size: 14px;
+            border-bottom: 1px solid #444;
+        }
+        #terminal-frame {
+            flex: 1;
+            border: none;
+            width: 100%;
+            height: calc(100vh - 40px);
+        }
+    </style>
+</head>
+<body>
+    <div id="ttyd-container">
+        <div id="status">Connecting to device...</div>
+        <iframe id="terminal-frame" src=""></iframe>
+    </div>
+    <script>
+        // Extract serial from URL query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const serial = urlParams.get('serial');
+        
+        if (!serial) {
+            document.getElementById('status').textContent = 'Error: No device serial provided';
+            document.getElementById('status').style.color = '#ff6b6b';
+        } else {
+            document.getElementById('status').textContent = `Connecting to device: ${serial}`;
+            
+            // Construct ttyd URL - ttyd service will use SERIAL env var
+            // The ttyd service reads SERIAL from environment, so we pass it via URL
+            // Nginx will proxy this to ttyd container
+            const ttydUrl = `/ttyd/`;
+            
+            // Set iframe source to ttyd service
+            const frame = document.getElementById('terminal-frame');
+            // Store serial in sessionStorage for connect script to access
+            sessionStorage.setItem('pwnhub_device_serial', serial);
+            frame.src = ttydUrl;
+            
+            // Update status when terminal loads
+            frame.onload = function() {
+                document.getElementById('status').textContent = `Connected to device: ${serial}`;
+            };
+            
+            frame.onerror = function() {
+                document.getElementById('status').textContent = `Error: Failed to connect to device ${serial}`;
+                document.getElementById('status').style.color = '#ff6b6b';
+            };
+        }
+    </script>
+</body>
+</html>
+

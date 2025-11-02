@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  pwnhub-api:
+    build:
+      context: ../pwnhub-api
+      dockerfile: Dockerfile
+    container_name: pwnhub-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+      - ./storage:/srv/pwnhub
+    environment:
+      - HUB_HOST=${HUB_HOST:-localhost}
+    restart: unless-stopped
+    networks:
+      - pwnhub-network
+
+  pwnhub-web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: pwnhub-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - pwnhub-api
+    restart: unless-stopped
+    networks:
+      - pwnhub-network
+
+  ttyd:
+    image: tsl0922/ttyd:latest
+    container_name: ttyd
+    ports:
+      - "7681:7681"
+    environment:
+      - SERIAL=${SERIAL:-}
+    volumes:
+      - ../scripts:/usr/local/bin:ro
+      - ./storage:/srv/pwnhub
+    command: ["--port", "7681", "--base-path", "/ttyd", "/usr/local/bin/ttyd-wrapper.sh"]
+    depends_on:
+      - pwnhub-api
+    restart: unless-stopped
+    networks:
+      - pwnhub-network
+
+networks:
+  pwnhub-network:
+    driver: bridge
+
+volumes:
+  pwnhub-data:
+    driver: local
+
