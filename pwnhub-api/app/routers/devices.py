@@ -256,3 +256,75 @@ async def provision_ssh(serial: str):
         conn.close()
         raise HTTPException(status_code=500, detail=f"Error during SSH provisioning: {str(e)}")
 
+
+@router.post("/{serial}/backup")
+async def backup_device(serial: str):
+    """Create a backup tarball of all handshake files for a device."""
+    import tarfile
+    from datetime import datetime
+    from app.database import get_backup_storage_path, get_handshake_storage_path
+    
+    conn = get_conn()
+    cursor = conn.cursor()
+    
+    # Get device from database
+    cursor.execute("SELECT id, serial FROM devices WHERE serial = ?", (serial,))
+    device = cursor.fetchone()
+    
+    if not device:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Device with serial {serial} not found")
+    
+    # Get handshake directory for device
+    storage_base = get_handshake_storage_path()
+    device_handshakes_dir = storage_base / serial
+    
+    if not device_handshakes_dir.exists():
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"No handshakes found for device {serial}")
+    
+    # Get list of files to backup
+    handshake_files = list(device_handshakes_dir.iterdir())
+    handshake_files = [f for f in handshake_files if f.is_file()]
+    
+    if not handshake_files:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"No handshake files found for device {serial}")
+    
+    # Create backup directory
+    backup_base = get_backup_storage_path()
+    device_backup_dir = backup_base / serial
+    device_backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate backup filename: YYYYMMDD.tar.gz
+    timestamp = datetime.now().strftime("%Y%m%d")
+    backup_filename = f"{timestamp}.tar.gz"
+    backup_path = device_backup_dir / backup_filename
+    
+    try:
+        # Create tarball
+        with tarfile.open(backup_path, "w:gz") as tar:
+            for handshake_file in handshake_files:
+                # Add file to tarball with relative path
+                arcname = handshake_file.name
+                tar.add(handshake_file, arcname=arcname)
+        
+        # Get backup file size
+        backup_size = backup_path.stat().st_size
+        
+        conn.close()
+        
+        return {
+            "status": "ok",
+            "backup_path": str(backup_path),
+            "size_bytes": backup_size,
+            "filename": backup_filename
+        }
+        
+    except Exception as e:
+        # Clean up partial backup if created
+        if backup_path.exists():
+            backup_path.unlink()
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Error creating backup: {str(e)}")
+

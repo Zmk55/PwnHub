@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
 from app.database import get_conn, get_handshake_storage_path
 
 router = APIRouter()
@@ -126,4 +127,62 @@ async def list_handshakes():
         })
     
     return {"handshakes": handshakes}
+
+
+@router.get("/{serial}/list")
+async def list_device_handshakes(serial: str):
+    """List all handshake files for a specific device."""
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, serial, filename, bytes, sha256, uploaded_at
+        FROM handshakes
+        WHERE serial = ?
+        ORDER BY uploaded_at DESC
+    """, (serial,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    handshakes = []
+    for row in rows:
+        handshakes.append({
+            "id": row[0],
+            "serial": row[1],
+            "filename": row[2],
+            "bytes": row[3],
+            "sha256": row[4],
+            "uploaded_at": row[5]
+        })
+    
+    return {"handshakes": handshakes}
+
+
+@router.get("/{serial}/download/{filename}")
+async def download_handshake(serial: str, filename: str):
+    """Download a handshake file for a specific device."""
+    # Validate filename to prevent directory traversal
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    # Get file path
+    storage_base = get_handshake_storage_path()
+    device_dir = storage_base / serial
+    file_path = device_dir / filename
+    
+    # Validate file exists
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Handshake file not found: {filename}")
+    
+    # Validate file is within device directory (security check)
+    try:
+        file_path.resolve().relative_to(device_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    
+    # Return file response
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type='application/octet-stream'
+    )
 

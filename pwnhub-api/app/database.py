@@ -68,3 +68,10 @@ def get_handshake_storage_path() -> Path:
     storage_dir.mkdir(parents=True, exist_ok=True)
     return storage_dir / "handshakes"
 
+
+def get_backup_storage_path() -> Path:
+    """Get the backup storage path. Uses /srv/pwnhub in Docker, ./storage locally."""
+    storage_dir = Path("/srv/pwnhub") if Path("/srv/pwnhub").exists() else Path("./storage")
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    return storage_dir / "backups"
+
