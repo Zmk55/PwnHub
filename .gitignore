@@ -72,4 +72,3 @@ Thumbs.db
 # Project specific
 /srv/pwnhub/
 deploy/data/
-/agent/Example.py
