@@ -88,7 +88,13 @@ class PwnHub(plugins.Plugin):
         self.background_thread.start()
         self.logger.info("Background thread started")
 
-    def on_unload(self):
+    def on_ready(self, agent):
+        """Called when the Pwnagotchi agent is ready."""
+        self.logger.info("Agent ready")
+        # Store agent reference if needed later
+        # (Not currently needed for this plugin, but required for proper registration)
+
+    def on_unload(self, ui):
         """Called when plugin is unloaded."""
         self.running = False
         if self.background_thread:
